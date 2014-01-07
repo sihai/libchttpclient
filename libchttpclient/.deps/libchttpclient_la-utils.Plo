@@ -1,0 +1,9 @@
+libchttpclient_la-utils.lo: utils.c /usr/include/stdc-predef.h \
+ /usr/lib/gcc/x86_64-redhat-linux/4.8.2/include/stddef.h \
+ ../include/libchttpclient.h
+
+/usr/include/stdc-predef.h:
+
+/usr/lib/gcc/x86_64-redhat-linux/4.8.2/include/stddef.h:
+
+../include/libchttpclient.h:

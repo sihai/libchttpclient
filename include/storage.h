@@ -57,10 +57,10 @@ typedef struct token {
  * \brief          callback of async store request
  *
  * \member token
- * \member result
+ * \member response
  *
  */
-typedef void(*storage_callback)(token* token, char* result);
+typedef void(*storage_callback)(token* token, response* response);
 
 /**
  * \brief          parse token

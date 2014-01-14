@@ -44,7 +44,6 @@ typedef struct token {
 	long  file_id;
 	long  user_id;
 	char  str_user_id[64];
-	char  client_net_type[128];
 	char  biz_code[128];
 	char  private_data[128];
 } token;

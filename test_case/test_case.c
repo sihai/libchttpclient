@@ -629,7 +629,6 @@ void test_storage() {
 
 	token token;
 	sprintf(token.biz_code, "mtopupload");
-	sprintf(token.client_net_type, "3gpp");
 	token.crc = 123;
 	token.expire = 1000;
 	token.file_id = 123;
@@ -667,7 +666,6 @@ void test_parse_token() {
 	printf("token->file_id: %ld\n", t->file_id);
 	printf("token->user_id: %ld\n", t->user_id);
 	printf("token->str_user_id: %s\n", t->str_user_id);
-	printf("token->client_net_type: %s\n", t->client_net_type);
 	printf("token->biz_code: %s\n", t->biz_code);
 	printf("token->private_data: %s\n", t->private_data);
 

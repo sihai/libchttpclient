@@ -34,15 +34,15 @@
  */
 typedef struct token {
 
-	char  verison;
-	char  upload_type;
-	int   max_retry_times;
-	short validate_type;
-	int   size;
-	int   crc;
-	long  expire;
-	long  file_id;
-	long  user_id;
+	uint8_t  verison;
+	uint8_t  upload_type;
+	uint32_t   max_retry_times;
+	uint16_t validate_type;
+	uint32_t   size;
+	uint32_t   crc;
+	uint64_t  expire;
+	uint64_t  file_id;
+	uint64_t  user_id;
 	char  str_user_id[64];
 	char  biz_code[128];
 	char  private_data[128];

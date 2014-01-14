@@ -1,8 +1,16 @@
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
+
 #include <pthread.h>
 #include <stdio.h>
 
+#include "type.h"
 #include "libchttpclient.h"
 #include "aes.h"
+#include "md5.h"
+#include "storage.h"
 
 int total = 1024;
 pthread_mutex_t g_lock;					//
@@ -36,6 +44,15 @@ void init_env() {
 void clear_env() {
 	pthread_mutex_destroy(&(g_lock));
 	pthread_cond_destroy(&(g_condition));
+}
+
+//=========================================================
+//
+//=========================================================
+long current_time() {
+   struct timeval tv;
+   gettimeofday(&tv,NULL);
+   return tv.tv_sec * 1000 + tv.tv_usec / 1000;
 }
 
 //=========================================================
@@ -526,14 +543,154 @@ void test_aes() {
 
 }
 
+void test_really() {
+
+	int ret = SUCCEED;
+	int offset = 0;
+	char* version = "1.0";
+	aes_context ctx;
+	size_t length = 512;
+	char buffer[512];
+	char buf[512];
+	unsigned char iv[16] = "0102030405060708";
+	char* key = "ghlbOVdKdJz(oOKd";
+	char* token = "MS4wKzgranBnKzEwMjQrMTIzKzEzODkzMzcyNjY0OTArM2M2M2ViNTYtZjNjYS00NGM0LWFiN2ItZDQ4NWRhMjAwYzdlK210b3BfdXBsb2FkK251bGwrYXBwa2V5PTEyMw==";
+	// base64 decode
+	// 解码
+	memset(buffer, 0x00, 512);
+	memset(buf, 0x00, 512);
+	ret = base64_decode((unsigned char*)buf, &length, token, sizeof(char) * strlen(token));
+	if(SUCCEED != ret) {
+		printf("base64_decode failed, code:%d\n", ret);
+		return;
+	}
+	printf("base64_decode result:%s, length:%d\n", buf, length);
+
+	// ase 解密
+	printf("key length:%d\n", sizeof(char) * strlen(key));
+	ret = aes_setkey_dec(&ctx, key, 128);
+	if(SUCCEED != ret) {
+		printf("aes_setkey_dec failed, errorCode:%d\n", ret);
+		exit(ret);
+	}
+	offset += sizeof(char) * (strlen(version) + 1);
+	printf("offset:%d\n", offset);
+	char* p = buf + offset;
+	int i = 0;
+	for(; i < length - offset; i++, p++) {
+		if(*p >= 1 && *p <= 16) {
+			*p = 0;
+		}
+	}
+	ret = aes_crypt_cbc(&ctx, AES_DECRYPT, length - offset, iv, buf + offset, buffer);
+	if(SUCCEED != ret) {
+		printf("decrypt failed, errorCode:%d\n", ret);
+	} else {
+		printf("decrypt result:%s\n", buffer);
+	}
+
+}
+
+char* get_data_from_file(char* file_name) {
+	int size = 0;
+	int readed = 0;
+	FILE *fp = NULL;
+
+	fp = fopen(file_name, "r");
+	if(NULL == fp) {
+		printf("open file:%s failed", file_name);
+		exit(-1);
+	}
+
+	if(fseek(fp, 0, SEEK_END)) {
+		printf("fseek failed\n");
+		exit(-1);
+	}
+	size = ftell(fp);
+	if(fseek(fp, 0, SEEK_SET)) {
+		printf("fseek failed\n");
+		exit(-1);
+	}
+	char* data = malloc(4 + size);
+	if(NULL == data) {
+		printf("alloc memory failed\n");
+		exit(-1);
+	}
+	memset(data, 0x00, 4 + size);
+
+	*((int*) data) = size;
+
+	fread(data + 4, 1, size, fp);
+	fclose(fp);
+	return data;
+}
+
+void test_storage() {
+
+	token token;
+	sprintf(token.biz_code, "mtopupload");
+	sprintf(token.client_net_type, "3gpp");
+	token.crc = 123;
+	token.expire = 1000;
+	token.file_id = 123;
+	token.max_retry_times = 2;
+	sprintf(token.private_data, "appkey=1234");
+	token.size = 1024;
+	sprintf(token.str_user_id, "2026322467");
+	token.user_id = 2026322467;
+	token.upload_type = 0;
+	token.validate_type = 0;
+	token.verison = 1;
+
+	char* data = get_data_from_file("/home/sihai/test.jpg");
+	printf("try to sync request storage\n");
+	long start = current_time();
+	response* response = sync_store_2_meida_center(&token, "test.jpg", data + 4, *((int*)data));
+	printf("consume: %d ms\n", current_time() - start);
+	printf("response:%s\n", response->content);
+	destroy_response(response);
+	printf("sync request storage ok\n");
+	free(data);
+}
+
+void test_parse_token() {
+	char* txt = "AQAIAAAAAAAABAAAAAQAAOHsro9DAQAAC33GyP////8jOsd4AAAAAAQzZ3BwC210b3BfdXBsb2FkEGFwcGtleT0xMjMmaz0zMjE=";
+	token* t = parse_token(txt, sizeof(char) * strlen(txt));
+	printf("==================token=====================\n");
+	printf("token->verison: %d\n", t->verison);
+	printf("token->upload_type: %d\n", t->upload_type);
+	printf("token->max_retry_times: %d\n", t->max_retry_times);
+	printf("token->validate_type: %d\n", t->validate_type);
+	printf("token->size: %d\n", t->size);
+	printf("token->crc: %d\n", t->crc);
+	printf("token->expire: %ld\n", t->expire);
+	printf("token->file_id: %ld\n", t->file_id);
+	printf("token->user_id: %ld\n", t->user_id);
+	printf("token->str_user_id: %s\n", t->str_user_id);
+	printf("token->client_net_type: %s\n", t->client_net_type);
+	printf("token->biz_code: %s\n", t->biz_code);
+	printf("token->private_data: %s\n", t->private_data);
+
+	printf("==================token=====================\n");
+	free(t);
+}
+
 void main(char** args) {
 	// test sync
-	test_sync();
+	//test_sync();
 	// test_async
-	test_async();
+	//test_async();
 	// test base64
-	test_base64();
+	//test_base64();
 	// test aes
-	test_aes();
+	//test_aes();
+
+	// test really
+	//test_really();
+
+	// test storage
+	test_storage();
+
+	//test_parse_token();
 }
 

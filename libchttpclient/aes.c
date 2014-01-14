@@ -785,16 +785,19 @@ int aes_crypt_cbc(aes_context* ctx, int mode, size_t length, unsigned char iv[16
 
     if( mode == AES_DECRYPT )
     {
+    	int i = 0;
         while( length > 0 )
         {
             memcpy( temp, input, 16 );
+            printf("try to aes_crypt_ecb %d\n", i++);
             aes_crypt_ecb( ctx, mode, input, output );
-
+            printf("aes_crypt_ecb ok\n");
             for( i = 0; i < 16; i++ )
                 output[i] = (unsigned char)( output[i] ^ iv[i] );
 
+            printf("memcpy start\n");
             memcpy( iv, temp, 16 );
-
+            printf("memcpy ok\n");
             input  += 16;
             output += 16;
             length -= 16;

@@ -55,6 +55,9 @@ static int curl_code_map_2_my_code(CURLcode code);
 //=========================================================
 static response* do_request(request* request);
 
+static size_t defult_get_data_size(request* request) {
+	return 0;
+}
 static size_t default_writer(void* buffer, size_t size, size_t nmemb, void* userp) {
 	// 默认没有数据需要写出
 	printf("default_writer write none data\n");
@@ -62,6 +65,7 @@ static size_t default_writer(void* buffer, size_t size, size_t nmemb, void* user
 }
 
 static size_t default_reader(void* contents, size_t size, size_t nmemb, void* userp) {
+	fprintf(stderr, "reader\n");
 	response* r = (response*)userp;
 	size_t realsize = size * nmemb;
 	if(NULL == r->content) {
@@ -81,7 +85,8 @@ void default_append(parameters* parameters, parameter* parameter) {
 	if(NULL == parameters->parameter) {
 		parameters->parameter = parameter;
 	} else {
-		parameters->parameter->next = parameter;
+		parameter->next = parameters->parameter;
+		parameters->parameter = parameter;
 	}
 
 	parameters->size++;
@@ -144,6 +149,7 @@ static int initialize_workers() {
 				g_workers[j].is_stoped = 1;
 				pthread_cancel(g_workers[i].pthread);
 			}
+
 			free(g_workers);
 			break;
 		}
@@ -249,10 +255,10 @@ void release(config* config) {
 }
 
 request* new_request(char* url, http_method method, void* attachment) {
-	return new_request_w_r(url, method, attachment, &default_writer, &default_reader);
+	return new_request_r(url, method, attachment, &default_reader);
 }
 
-request* new_request_w_r(char* url, http_method method, void* attachment, writer writer, reader reader) {
+request* new_request_r(char* url, http_method method, void* attachment, reader reader) {
 	request* r = (request*)malloc(sizeof(request));
 	if(NULL == r) {
 		return NULL;
@@ -260,11 +266,29 @@ request* new_request_w_r(char* url, http_method method, void* attachment, writer
 	memset(r, 0x00, sizeof(request));
 	r->url = url;
 	r->method = method;
-	r->writer = writer;
 	r->reader = reader;
 	r->attachment = attachment;
 
 	return r;
+}
+
+int set_upload_file(request* request, char* key, char* file_name, char* data, int size) {
+
+	upload_memory_file* file = malloc(sizeof(upload_memory_file));
+	if(NULL == file) {
+		return ERROR_NO_MEMORY;
+	}
+	memset(file, 0x00, sizeof(upload_memory_file));
+	file->key = key;
+	file->file_name = file_name;
+	file->data = data;
+	file->size = size;
+	// 先释放以前的资源
+	if(NULL != request->upload_file) {
+		free(request->upload_file);
+	}
+	request->upload_file = file;
+	return SUCCEED;
 }
 
 int append_query(request* request, char* key, char* value) {
@@ -314,6 +338,10 @@ void destroy_request(request* request) {
 			free(p);
 		}
 		free(request->parameters);
+	}
+
+	if(NULL != request->upload_file) {
+		free(request->upload_file);
 	}
 	free(request);
 }
@@ -373,6 +401,102 @@ int curl_code_map_2_my_code(CURLcode code) {
 	return code;
 }
 
+//====================================================================================
+//					FOR DEBUG
+//====================================================================================
+
+struct data {
+  char trace_ascii; /* 1 or 0 */
+};
+
+static
+void dump(const char *text,
+          FILE *stream, unsigned char *ptr, size_t size,
+          char nohex)
+{
+  size_t i;
+  size_t c;
+
+  unsigned int width=0x10;
+
+  if(nohex)
+    /* without the hex output, we can fit more on screen */
+    width = 0x40;
+
+  fprintf(stream, "%s, %10.10ld bytes (0x%8.8lx)\n",
+          text, (long)size, (long)size);
+
+  for(i=0; i<size; i+= width) {
+
+    fprintf(stream, "%4.4lx: ", (long)i);
+
+    if(!nohex) {
+      /* hex not disabled, show it */
+      for(c = 0; c < width; c++)
+        if(i+c < size)
+          fprintf(stream, "%02x ", ptr[i+c]);
+        else
+          fputs("   ", stream);
+    }
+
+    for(c = 0; (c < width) && (i+c < size); c++) {
+      /* check for 0D0A; if found, skip past and start a new line of output */
+      if (nohex && (i+c+1 < size) && ptr[i+c]==0x0D && ptr[i+c+1]==0x0A) {
+        i+=(c+2-width);
+        break;
+      }
+      fprintf(stream, "%c",
+              (ptr[i+c]>=0x20) && (ptr[i+c]<0x80)?ptr[i+c]:'.');
+      /* check again for 0D0A, to avoid an extra \n if it's at width */
+      if (nohex && (i+c+2 < size) && ptr[i+c+1]==0x0D && ptr[i+c+2]==0x0A) {
+        i+=(c+3-width);
+        break;
+      }
+    }
+    fputc('\n', stream); /* newline */
+  }
+  fflush(stream);
+}
+
+static
+int my_trace(CURL *handle, curl_infotype type,
+             char *data, size_t size,
+             void *userp)
+{
+  struct data *config = (struct data *)userp;
+  const char *text;
+  (void)handle; /* prevent compiler warning */
+
+  switch (type) {
+  case CURLINFO_TEXT:
+    fprintf(stderr, "== Info: %s", data);
+  default: /* in case a new one is introduced to shock us */
+    return 0;
+
+  case CURLINFO_HEADER_OUT:
+    text = "=> Send header";
+    break;
+  case CURLINFO_DATA_OUT:
+    text = "=> Send data";
+    break;
+  case CURLINFO_SSL_DATA_OUT:
+    text = "=> Send SSL data";
+    break;
+  case CURLINFO_HEADER_IN:
+    text = "<= Recv header";
+    break;
+  case CURLINFO_DATA_IN:
+    text = "<= Recv data";
+    break;
+  case CURLINFO_SSL_DATA_IN:
+    text = "<= Recv SSL data";
+    break;
+  }
+
+  dump(text, stderr, (unsigned char *)data, size, config->trace_ascii);
+  return 0;
+}
+
 response* do_request(request* request) {
 	response* r = (response*)malloc(sizeof(response));
 	if(NULL == r) {
@@ -387,6 +511,15 @@ response* do_request(request* request) {
 	if(NULL == curl) {
 		r->result_code = ERROR_NO_MEMORY;
 	} else {
+		// DEBUG
+		struct data config;
+		config.trace_ascii = 1; /* enable ascii tracing */
+		curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, my_trace);
+		curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &config);
+
+		/* the DEBUGFUNCTION has no effect until we enable VERBOSE */
+		curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
 		curl_easy_setopt(curl, CURLOPT_URL, request->url);
 		if(POST == request->method) {
 			curl_easy_setopt(curl, CURLOPT_POST, 1L);
@@ -400,12 +533,53 @@ response* do_request(request* request) {
 		// set 查询参数
 		char* url_buffer = NULL;
 		char* query_buffer = NULL;
-		if(NULL != request->parameters && request->parameters->size > 0) {
-			query_buffer = request->parameters->to_buffer(request->parameters);
-			if(POST == request->method) {
-				curl_easy_setopt(curl, CURLOPT_POSTFIELDS, query_buffer);
-				curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, request->parameters->memory_size);
-			} else {
+		struct curl_httppost* formpost = NULL;
+		struct curl_httppost* lastptr  = NULL;
+
+		if(POST == request->method || NULL != request->upload_file) {
+			// query string
+			/*if(NULL != request->parameters) {
+				query_buffer = request->parameters->to_buffer(request->parameters);
+				// GET 将参数拼接到url
+				url_buffer = malloc(sizeof(char) * (strlen(query_buffer) + 2) + request->parameters->memory_size );
+				if(NULL == url_buffer) {
+					r->result_code = ERROR_NO_MEMORY;
+				}
+				if(strrchr(request->url, '?')) {
+					sprintf(url_buffer, "%s%s", request->url, query_buffer);
+				} else {
+					sprintf(url_buffer, "%s?%s", request->url, query_buffer);
+				}
+				// set new url
+				curl_easy_setopt(curl, CURLOPT_URL, url_buffer);
+				printf("new url:%s\n", url_buffer);
+			}*/
+			if(NULL != request->parameters) {
+				printf("try add parameters \n");
+				parameter* p = request->parameters->parameter;
+				for(; NULL != p; p = p->next) {
+					printf("query string: %s=%s\n", p->key, p->value);
+					curl_formadd(&formpost, &lastptr, CURLFORM_COPYNAME, p->key, CURLFORM_COPYCONTENTS, p->value, CURLFORM_END);
+				}
+				printf("add parameters ok \n");
+			}
+			// upload file
+			if(NULL != request->upload_file) {
+				curl_formadd(&formpost,
+				          &lastptr,
+				          CURLFORM_COPYNAME, request->upload_file->key,
+				          CURLFORM_BUFFER, request->upload_file->file_name,
+				          CURLFORM_BUFFERPTR, request->upload_file->data,
+				          CURLFORM_BUFFERLENGTH, request->upload_file->size,
+				          CURLFORM_END);
+
+				printf("set upload file ok\n");
+			}
+			if(NULL != formpost) {
+				curl_easy_setopt(curl, CURLOPT_HTTPPOST, formpost);
+			}
+		} else {
+			if(NULL != request->parameters) {
 				// GET 将参数拼接到url
 				url_buffer = malloc(sizeof(char) * (strlen(query_buffer) + 2) + request->parameters->memory_size );
 				if(NULL == url_buffer) {
@@ -422,12 +596,10 @@ response* do_request(request* request) {
 			}
 		}
 
-		curl_easy_setopt(curl, CURLOPT_READFUNCTION, request->writer);
-		curl_easy_setopt(curl, CURLOPT_READDATA, request);
 		/* send all data to this function  */
 		curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, request->reader);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, r);
-
+		printf("try to do curl_easy_perform \n");
 		CURLcode code = curl_easy_perform(curl);
 		 if(CURLE_OK == code) {
 			 r->result_code = SUCCEED;
@@ -435,6 +607,7 @@ response* do_request(request* request) {
 		 } else {
 			 r->result_code = curl_code_map_2_my_code(code);
 			 r->http_response_code = -1;
+			 fprintf(stderr, "curl_easy_perform() failed: %s\n", curl_easy_strerror(code));
 		 }
 
 		 // 释放 query的 buffer
@@ -444,8 +617,15 @@ response* do_request(request* request) {
 		 if(NULL != url_buffer) {
 			 free(url_buffer);
 		 }
+		 if(NULL != formpost) {
+			 curl_formfree(formpost);
+		 }
+		/* if(NULL != lastptr) {
+			 curl_formfree(lastptr);
+		 }*/
 		// clean
 		curl_easy_cleanup(curl);
+		printf("http request ok\n");
 	}
 
 	return r;

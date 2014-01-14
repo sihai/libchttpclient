@@ -8,7 +8,7 @@ lib_LTLIBRARIES = libchttpclient.la
 # Build information for each library
 
 # Sources for libchttpclient
-libchttpclient_la_SOURCES = libchttpclient.c queue.c utils.c aes.c
+libchttpclient_la_SOURCES = libchttpclient.c queue.c utils.c aes.c md5.c storage.c
 
 # Linker options libTestProgram
 libchttpclient_la_LDFLAGS = 

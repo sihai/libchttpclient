@@ -1,10 +1,7 @@
 #ifndef libasynchttpclient_H
 #define libasynchttpclient_H
 
-#include <stddef.h>
-//#include <stdio.h>
-//#include <stdlib.h>
-//#include <string.h>
+#include "type.h"
 
 //============================================================================
 //				常量
@@ -47,9 +44,18 @@ typedef struct config {
 	int timeout;							// 超时
 } config;
 
+typedef struct upload_memory_file {
+
+	char* key;
+	char* file_name;
+	char* data;
+	long   size;
+} upload_memory_file;
+
 //============================================================================
 //				回调函数
 //============================================================================
+typedef struct request request;
 typedef struct response response;
 
 typedef void (*callback)(response*);
@@ -82,10 +88,6 @@ typedef struct parameters {
 } parameters;
 
 //============================================================================
-//					将http请求的二进制写出
-//============================================================================
-typedef size_t (*writer)(void* buffer, size_t size, size_t nmemb, void* userp);
-//============================================================================
 //					读入http响应
 //============================================================================
 typedef size_t (*reader)(void *contents, size_t size, size_t nmemb, void *userp);
@@ -101,7 +103,8 @@ typedef struct request {
 	struct curl_slist* headers;									// http headers
 	parameters* parameters;										// 查询参数
 
-	writer writer;												// 将http请求的二进制写出
+	upload_memory_file* upload_file;							// 上传文件, 目前只支持一个, 并且在内存中
+
 	reader reader;												// 读入http响应
 	callback callback;											// 回调
 
@@ -127,7 +130,7 @@ typedef struct response {
 extern int initialize(config* config);
 
 //============================================================================
-//				创建一个请求
+//				创建一个请求, caller负责释放
 //	@param url
 //	@param method
 //  @param attachment
@@ -135,14 +138,23 @@ extern int initialize(config* config);
 request* new_request(char* url, http_method method, void* attachment);
 
 //============================================================================
-//				创建一个请求
+//				创建一个请求, caller负责释放
 //	@param url
 //  @param attachment
 //	@param method
-//  @param writer
 //  @param reader
 //============================================================================
-request* new_request_w_r(char* url, http_method method, void* attachment, writer writer, reader reader);
+request* new_request_r(char* url, http_method method, void* attachment, reader reader);
+
+//============================================================================
+//				设置上传文件
+//	@param request
+//  @param key
+//  @param file_name
+//	@param data
+//  @param size
+//============================================================================
+int set_upload_file(request* request, char* key, char* file_name, char* data, int size);
 
 //============================================================================
 //				向请求中添加查询参数, 目前只支持字符串类参数
@@ -161,7 +173,7 @@ int append_query(request* request, char* key, char* value);
 int append_header(request* request, char* key, char* value);
 
 //============================================================================
-//				销毁由new_request或new_request_w_r创建的请求
+//				销毁由new_request或new_request_r创建的请求
 //	@param request
 //============================================================================
 void destroy_request(request* request);

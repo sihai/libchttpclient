@@ -138,12 +138,12 @@ token* parse_token(char* buffer, int size) {
 
 	// 变长的了
 	// client_net_type
-	tlen = *p;
+	/*tlen = *p;
 	p++;
 	if(tlen > 0) {
 		memcpy(t->client_net_type, p, tlen);
 	}
-	p += tlen;
+	p += tlen;*/
 
 	// biz_code
 	tlen = *p;

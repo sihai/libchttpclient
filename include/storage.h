@@ -36,8 +36,8 @@ typedef struct token {
 
 	uint8_t  verison;
 	uint8_t  upload_type;
-	uint32_t   max_retry_times;
-	uint16_t validate_type;
+	uint8_t  max_retry_times;
+	uint8_t  validate_type;
 	uint32_t   size;
 	uint32_t   crc;
 	uint64_t  expire;

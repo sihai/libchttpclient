@@ -591,6 +591,25 @@ void test_really() {
 
 }
 
+int get_file_size(char* file_name) {
+
+	int size = 0;
+	FILE *fp = NULL;
+
+	fp = fopen(file_name, "r");
+	if(NULL == fp) {
+		printf("open file:%s failed", file_name);
+		exit(-1);
+	}
+	if(fseek(fp, 0, SEEK_END)) {
+		printf("fseek failed\n");
+		exit(-1);
+	}
+	size = ftell(fp);
+	fclose(fp);
+	return size;
+}
+
 char* get_data_from_file(char* file_name) {
 	int size = 0;
 	int readed = 0;
@@ -625,6 +644,21 @@ char* get_data_from_file(char* file_name) {
 	return data;
 }
 
+int16_t get_validate_type(char* file_name) {
+	FILE *fp = NULL;
+	int32_t v = 0;
+
+	fp = fopen(file_name, "r");
+	if(NULL == fp) {
+		printf("open file:%s failed", file_name);
+		exit(-1);
+	}
+	fread(&v, 2, 1, fp);
+	fclose(fp);
+	return v;
+}
+
+
 void test_storage() {
 
 	token token;
@@ -653,7 +687,7 @@ void test_storage() {
 }
 
 void test_parse_token() {
-	char* txt = "AQAIAAAAAAAABAAAAAQAAOHsro9DAQAAC33GyP////8jOsd4AAAAAAQzZ3BwC210b3BfdXBsb2FkEGFwcGtleT0xMjMmaz0zMjE=";
+	char* txt = "AQAIAMEHAABvAAAAkj0ImUMBAAAN6H9DAAAAACM6x3gAAAAACm10b3B1cGxvYWQKYXBwa2V5OjEyMw==";
 	token* t = parse_token(txt, sizeof(char) * strlen(txt));
 	printf("==================token=====================\n");
 	printf("token->verison: %d\n", t->verison);
@@ -687,8 +721,11 @@ void main(char** args) {
 	//test_really();
 
 	// test storage
-	test_storage();
+	//test_storage();
 
-	//test_parse_token();
+	test_parse_token();
+
+	printf("size:%d\n", get_file_size("/home/sihai/test.jpg"));
+	printf("validate_type:%d", get_validate_type("/home/sihai/test.jpg"));
 }
 

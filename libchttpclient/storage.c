@@ -128,8 +128,10 @@ token* parse_token(char* buffer, int size) {
 	t->verison = tmp_buffer[0];
 	t->upload_type = *p;
 	p++;
-	t->max_retry_times = read_int(&p);
-	t->validate_type = read_short(&p);
+	t->max_retry_times = *p;
+	p++;
+	t->validate_type = *p;
+	p++;
 	t->size = read_int(&p);
 	t->crc = read_int(&p);
 	t->expire = read_long(&p);
